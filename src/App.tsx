@@ -1,37 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
-
-type Apartment = {
-  name: string
-  rent: number
-  utilities: number
-  parking: number
-  petFee: number
-  depositMultiplier: number
-  applicationFees: number
-  commute: number
-}
-
-type PlannerInputs = {
-  grossIncome: number
-  takeHomePay: number
-  debtPayments: number
-  transportation: number
-  subscriptions: number
-  targetRent: number
-  utilities: number
-  rentersInsurance: number
-  applicationFees: number
-  depositMultiplier: number
-  movingCost: number
-  furnitureEssentials: number
-  utilityDeposits: number
-  emergencyCushion: number
-  pets: boolean
-  parking: boolean
-}
+import { trackEvent } from './lib/analytics'
+import { buildShareUrl, decodePlannerState } from './lib/shareLink'
+import { clearPlannerState, loadSavedPlannerState, savePlannerState } from './lib/storage'
+import { defaultApartments, defaultPlannerInputs, type Apartment, type PlannerInputs, type PropertyType } from './types'
 
 type RiskLevel = 'comfortable' | 'tight' | 'risky'
+
+type ShareStatus = 'idle' | 'copied' | 'failed'
 
 const currency = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -43,58 +19,6 @@ const percent = new Intl.NumberFormat('en-US', {
   style: 'percent',
   maximumFractionDigits: 0,
 })
-
-const initialInputs: PlannerInputs = {
-  grossIncome: 5200,
-  takeHomePay: 4100,
-  debtPayments: 450,
-  transportation: 325,
-  subscriptions: 125,
-  targetRent: 1450,
-  utilities: 225,
-  rentersInsurance: 18,
-  applicationFees: 150,
-  depositMultiplier: 1,
-  movingCost: 650,
-  furnitureEssentials: 1200,
-  utilityDeposits: 200,
-  emergencyCushion: 1500,
-  pets: false,
-  parking: true,
-}
-
-const initialApartments: Apartment[] = [
-  {
-    name: 'Riverside Studio',
-    rent: 1395,
-    utilities: 210,
-    parking: 95,
-    petFee: 0,
-    depositMultiplier: 1,
-    applicationFees: 125,
-    commute: 160,
-  },
-  {
-    name: 'Center City One Bed',
-    rent: 1675,
-    utilities: 180,
-    parking: 0,
-    petFee: 35,
-    depositMultiplier: 1.5,
-    applicationFees: 175,
-    commute: 95,
-  },
-  {
-    name: 'Suburban Loft',
-    rent: 1290,
-    utilities: 260,
-    parking: 60,
-    petFee: 25,
-    depositMultiplier: 1,
-    applicationFees: 100,
-    commute: 240,
-  },
-]
 
 const seoQuestions = [
   {
@@ -115,10 +39,17 @@ const seoQuestions = [
 ]
 
 function App() {
-  const [inputs, setInputs] = useState<PlannerInputs>(initialInputs)
-  const [apartments, setApartments] = useState<Apartment[]>(initialApartments)
+  const savedState = typeof window !== 'undefined' ? loadSavedPlannerState() : null
+  const urlState = typeof window !== 'undefined' ? decodePlannerState(window.location.search) : {}
+  const [inputs, setInputs] = useState<PlannerInputs>({
+    ...defaultPlannerInputs,
+    ...savedState?.inputs,
+    ...urlState,
+  })
+  const [apartments, setApartments] = useState<Apartment[]>(savedState?.apartments ?? defaultApartments)
   const [email, setEmail] = useState('')
   const [emailSaved, setEmailSaved] = useState(false)
+  const [shareStatus, setShareStatus] = useState<ShareStatus>('idle')
 
   const results = useMemo(() => {
     const monthlyHousing =
@@ -199,8 +130,19 @@ function App() {
     return items
   }, [inputs.parking, inputs.pets, inputs.takeHomePay, results.moveInCash, results.risk])
 
-  const updateInput = (key: keyof PlannerInputs, value: number | boolean) => {
+  useEffect(() => {
+    savePlannerState(undefined, { inputs, apartments })
+  }, [inputs, apartments])
+
+  const updateInput = (key: keyof PlannerInputs, value: number | string | boolean) => {
     setInputs((current) => ({ ...current, [key]: value }))
+    setShareStatus('idle')
+    trackEvent('calculator_updated', {
+      zipCode: key === 'zipCode' ? String(value) : inputs.zipCode,
+      bedrooms: key === 'bedrooms' && typeof value === 'number' ? value : inputs.bedrooms,
+      propertyType: key === 'propertyType' ? String(value) : inputs.propertyType,
+      risk: results.risk,
+    })
   }
 
   const updateApartment = (index: number, key: keyof Apartment, value: number | string) => {
@@ -209,12 +151,39 @@ function App() {
         apartmentIndex === index ? { ...apartment, [key]: value } : apartment,
       ),
     )
+    trackEvent('comparison_updated', { zipCode: inputs.zipCode, bedrooms: inputs.bedrooms, propertyType: inputs.propertyType })
+  }
+
+  const resetPlanner = () => {
+    clearPlannerState()
+    setInputs(defaultPlannerInputs)
+    setApartments(defaultApartments)
+    setShareStatus('idle')
+    trackEvent('planner_reset')
+  }
+
+  const copyShareLink = async () => {
+    const shareUrl = buildShareUrl({ inputs, apartments })
+
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setShareStatus('copied')
+      trackEvent('share_link_copied', { zipCode: inputs.zipCode, bedrooms: inputs.bedrooms, propertyType: inputs.propertyType })
+    } catch {
+      setShareStatus('failed')
+    }
+  }
+
+  const printChecklist = () => {
+    trackEvent('checklist_printed', { zipCode: inputs.zipCode, bedrooms: inputs.bedrooms, propertyType: inputs.propertyType })
+    window.print()
   }
 
   const handleEmailSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!email.trim()) return
     setEmailSaved(true)
+    trackEvent('email_capture_submitted', { zipCode: inputs.zipCode, bedrooms: inputs.bedrooms, propertyType: inputs.propertyType })
   }
 
   return (
@@ -269,6 +238,28 @@ function App() {
             <h2>Monthly reality check</h2>
           </div>
 
+          <div className="location-grid">
+            <label>
+              ZIP code
+              <input
+                inputMode="numeric"
+                maxLength={5}
+                value={inputs.zipCode}
+                onChange={(event) => updateInput('zipCode', event.target.value.replace(/\D/g, '').slice(0, 5))}
+              />
+            </label>
+            <NumberField label="Bedrooms" value={inputs.bedrooms} onChange={(value) => updateInput('bedrooms', value)} step="1" />
+            <label>
+              Property type
+              <select value={inputs.propertyType} onChange={(event) => updateInput('propertyType', event.target.value as PropertyType)}>
+                <option value="apartment">Apartment</option>
+                <option value="condo">Condo</option>
+                <option value="townhouse">Townhouse</option>
+                <option value="single-family">Single-family</option>
+              </select>
+            </label>
+          </div>
+
           <div className="input-grid">
             <NumberField label="Gross monthly income" value={inputs.grossIncome} onChange={(value) => updateInput('grossIncome', value)} />
             <NumberField label="Take-home pay" value={inputs.takeHomePay} onChange={(value) => updateInput('takeHomePay', value)} />
@@ -294,6 +285,16 @@ function App() {
               Include pet rent estimate
             </label>
           </div>
+
+          <div className="planner-actions">
+            <button type="button" className="button primary" onClick={copyShareLink}>Copy share link</button>
+            <button type="button" className="button secondary" onClick={resetPlanner}>Reset saved plan</button>
+          </div>
+          <p className="privacy-note">
+            Your plan is saved in this browser only. Share links include broad calculator values, not your email or apartment names.
+          </p>
+          {shareStatus === 'copied' && <span className="saved-message">Share link copied.</span>}
+          {shareStatus === 'failed' && <span className="warning-inline">Could not access clipboard. Copy from the address bar after changing values.</span>}
         </form>
 
         <section className="panel output-panel" aria-live="polite">
@@ -364,6 +365,7 @@ function App() {
           <ol>
             {checklist.map((item) => <li key={item}>{item}</li>)}
           </ol>
+          <button type="button" className="button primary print-button" onClick={printChecklist}>Print checklist</button>
         </div>
 
         <form className="panel email-panel" onSubmit={handleEmailSubmit}>
@@ -433,3 +435,4 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 export default App
+
