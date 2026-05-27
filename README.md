@@ -43,3 +43,4 @@ npm run preview
 - PDF checklist export
 - City/state utility and move-in cost presets
 - Affiliate placements for renters insurance, movers, internet, and furniture, clearly labeled
+- Rent data API integration; see `docs/enhancement-research.md` for the researched provider recommendation and implementation plan.
