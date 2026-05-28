@@ -168,6 +168,7 @@
 }
 
 .input-grid,
+.location-grid,
 .mini-grid,
 .summary-cards,
 .faq-grid {
@@ -175,11 +176,17 @@
   gap: 14px;
 }
 
+.location-grid {
+  grid-template-columns: 1fr 1fr 1.2fr;
+  margin-bottom: 18px;
+}
+
 .input-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .number-field,
+.location-grid label,
 .apartment-card label,
 .email-panel label {
   display: grid;
@@ -190,6 +197,8 @@
 }
 
 .number-field input,
+.location-grid input,
+.location-grid select,
 .apartment-card input,
 .email-row input {
   width: 100%;
@@ -198,6 +207,10 @@
   padding: 12px 13px;
   color: var(--heading);
   background: rgba(5, 14, 27, 0.66);
+}
+
+.location-grid select {
+  appearance: none;
 }
 
 .number-field.compact input {
@@ -210,6 +223,24 @@
   flex-wrap: wrap;
   margin-top: 20px;
   color: var(--muted);
+}
+
+.planner-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+}
+
+.privacy-note {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.warning-inline {
+  color: #fde68a;
+  font-weight: 800;
 }
 
 .toggles label {
@@ -350,6 +381,10 @@
   line-height: 1.6;
 }
 
+.print-button {
+  margin-top: 24px;
+}
+
 .email-panel {
   display: grid;
   align-content: start;
@@ -418,6 +453,7 @@
   }
 
   .input-grid,
+  .location-grid,
   .summary-cards,
   .mini-grid {
     grid-template-columns: 1fr;
@@ -431,3 +467,41 @@
     padding: 20px;
   }
 }
+
+
+@media print {
+  body {
+    background: #ffffff;
+    color: #111827;
+  }
+
+  .hero-section,
+  .planner-grid,
+  .comparison-section,
+  .guides-section,
+  .email-panel,
+  .print-button {
+    display: none !important;
+  }
+
+  main,
+  .checklist-section,
+  .checklist-panel {
+    display: block;
+    width: 100%;
+    padding: 0;
+  }
+
+  .checklist-panel {
+    border: 0;
+    box-shadow: none;
+    color: #111827;
+    background: #ffffff;
+  }
+
+  .checklist-panel h2,
+  .checklist-panel li {
+    color: #111827;
+  }
+}
+
